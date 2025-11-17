@@ -18,6 +18,8 @@ jobs:
       FLEET_INFRA_BRANCH: main
       FLEET_INFRA_PATH: fleet-infra-manifests
       DEPLOYMENT_MANIFEST: fleet-infra-manifests/apps/deno-sample/deployment.yaml
+      FLEET_INFRA_GIT_TOKEN: ${{ secrets.FLEET_INFRA_GIT_TOKEN }}
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,15 +67,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Checkout fleet-infra manifests
+        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ env.FLEET_INFRA_REPO }}
           ref: ${{ env.FLEET_INFRA_BRANCH }}
           path: ${{ env.FLEET_INFRA_PATH }}
-          token: ${{ secrets.FLEET_INFRA_GIT_TOKEN }}
+          token: ${{ env.FLEET_INFRA_GIT_TOKEN }}
           fetch-depth: 0
 
       - name: Update Deployment image tag
+        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: |
@@ -85,6 +89,7 @@ jobs:
           perl -0pi -e 's|(image:\s+registry\.cn-beijing\.aliyuncs\.com/threepeople/deno-sample:).*|${1}$ENV{IMAGE_TAG}|' "${DEPLOYMENT_MANIFEST}"
 
       - name: Commit manifest update
+        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: |

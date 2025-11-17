@@ -61,7 +61,7 @@
    - 构建并推送 `linux/amd64, linux/arm64` 镜像到 `registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:{main, sha-xxxxxxx}`。
    - 通过 `actions/checkout` 以第二次检出 `liuyenhui/fleet-infra`（或配置在 `FLEET_INFRA_REPO/FLEET_INFRA_BRANCH` 中的仓库和分支），自动修改 `apps/deno-sample/deployment.yaml` 的镜像标签，并以 `github-actions[bot]` 身份推送 `chore: update deno-sample image to <tag>` 提交，供 Flux 捕获。
 3. 工作流生成的提交作者为 `github-actions[bot]`，后续 push 触发的工作流会因 `if: github.actor != 'github-actions[bot]'` 自动跳过，避免循环构建。
-4. 启用前需配置以下 Secrets：
+4. 启用前需配置以下 Secrets（若缺少 `FLEET_INFRA_GIT_TOKEN`，自动镜像发布仍会推送镜像，但不会改写 Flux 清单）：
    - `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`：阿里云镜像仓库凭据，用于 `docker/login-action`。
    - `FLEET_INFRA_GIT_TOKEN`：拥有 `repo` 权限的 GitHub PAT，用于将 `fleet-infra` 仓库检出、提交并推送（可限制为特定仓库）。
 5. 如需更新不同的 Flux 仓库或分支，可在工作流的 `env` 中覆盖 `FLEET_INFRA_REPO`、`FLEET_INFRA_BRANCH`、`FLEET_INFRA_PATH`。
