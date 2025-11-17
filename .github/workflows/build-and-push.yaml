@@ -13,13 +13,6 @@ jobs:
     permissions:
       contents: write
       packages: write
-    env:
-      FLEET_INFRA_REPO: liuyenhui/fleet-infra
-      FLEET_INFRA_BRANCH: main
-      FLEET_INFRA_PATH: fleet-infra-manifests
-      DEPLOYMENT_MANIFEST: fleet-infra-manifests/apps/deno-sample/deployment.yaml
-      FLEET_INFRA_GIT_TOKEN: ${{ secrets.FLEET_INFRA_GIT_TOKEN }}
-      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,7 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Prepare image tag
-        run: echo "IMAGE_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_ENV
+        run: |
+          TS_TAG="ts-$(date -u +'%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
+          echo "IMAGE_TAG=${TS_TAG}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -55,6 +50,7 @@ jobs:
           images: registry.cn-beijing.aliyuncs.com/threepeople/deno-sample
           tags: |
             type=ref,event=branch
+            type=sha
             type=raw,value=${{ env.IMAGE_TAG }}
 
       - name: Build and push image
@@ -65,45 +61,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Checkout fleet-infra manifests
-        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.FLEET_INFRA_REPO }}
-          ref: ${{ env.FLEET_INFRA_BRANCH }}
-          path: ${{ env.FLEET_INFRA_PATH }}
-          token: ${{ env.FLEET_INFRA_GIT_TOKEN }}
-          fetch-depth: 0
-
-      - name: Update Deployment image tag
-        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
-        env:
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        run: |
-          set -euo pipefail
-          if [ ! -f "${DEPLOYMENT_MANIFEST}" ]; then
-            echo "Deployment manifest ${DEPLOYMENT_MANIFEST} not found, skip updating."
-            exit 0
-          fi
-          perl -0pi -e 's|(image:\s+registry\.cn-beijing\.aliyuncs\.com/threepeople/deno-sample:).*|${1}$ENV{IMAGE_TAG}|' "${DEPLOYMENT_MANIFEST}"
-
-      - name: Commit manifest update
-        if: ${{ env.FLEET_INFRA_GIT_TOKEN != '' }}
-        env:
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        run: |
-          set -euo pipefail
-          if [ ! -f "${DEPLOYMENT_MANIFEST}" ]; then
-            echo "Deployment manifest ${DEPLOYMENT_MANIFEST} not found, skip commit."
-            exit 0
-          fi
-          if git -C "${FLEET_INFRA_PATH}" diff --quiet -- "apps/deno-sample/deployment.yaml"; then
-            echo "Deployment manifest already references ${IMAGE_TAG}"
-            exit 0
-          fi
-          git -C "${FLEET_INFRA_PATH}" config user.name "github-actions[bot]"
-          git -C "${FLEET_INFRA_PATH}" config user.email "github-actions[bot]@users.noreply.github.com"
-          git -C "${FLEET_INFRA_PATH}" add "apps/deno-sample/deployment.yaml"
-          git -C "${FLEET_INFRA_PATH}" commit -m "chore: update deno-sample image to ${IMAGE_TAG}"
-          git -C "${FLEET_INFRA_PATH}" push origin "${FLEET_INFRA_BRANCH}"
