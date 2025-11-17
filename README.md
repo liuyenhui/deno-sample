@@ -62,6 +62,7 @@
    - 自动修改 `fleet-infra/apps/deno-sample/deployment.yaml` 中的镜像标签，提交 `chore: update deno-sample image to <tag>` 到 `main`，以便 Flux 捕获清单差异。
 3. 工作流生成的提交作者为 `github-actions[bot]`，后续 push 触发的工作流会因 `if: github.actor != 'github-actions[bot]'` 自动跳过，避免循环构建。
 4. 启用前需在仓库 Secrets 中新增 `ALIYUN_REGISTRY_USERNAME` 与 `ALIYUN_REGISTRY_PASSWORD`，对应阿里云镜像仓库的账号。
+5. 若仓库里缺少 `fleet-infra/apps/deno-sample/deployment.yaml`（例如只包含应用源码而不包含集群清单），工作流会跳过 “Update Deployment image tag” 与 “Commit manifest update” 步骤，此时需要使用其他方式让集群获取新的镜像标签。
 
 ## 自动镜像发布
 - 每次推送应用代码时，CI 会产出一个新的 `sha-<commit>` 标签，并立即将 Deployment 更新到该标签；无需手动执行 `kubectl rollout restart`。

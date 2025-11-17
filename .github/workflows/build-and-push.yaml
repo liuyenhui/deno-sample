@@ -13,6 +13,8 @@ jobs:
     permissions:
       contents: write
       packages: write
+    env:
+      DEPLOYMENT_MANIFEST: fleet-infra/apps/deno-sample/deployment.yaml
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -63,18 +65,28 @@ jobs:
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: |
-          perl -0pi -e 's|(image:\s+registry\.cn-beijing\.aliyuncs\.com/threepeople/deno-sample:).*|${1}$ENV{IMAGE_TAG}|' fleet-infra/apps/deno-sample/deployment.yaml
+          set -euo pipefail
+          if [ ! -f "${DEPLOYMENT_MANIFEST}" ]; then
+            echo "Deployment manifest ${DEPLOYMENT_MANIFEST} not found, skip updating."
+            exit 0
+          fi
+          perl -0pi -e 's|(image:\s+registry\.cn-beijing\.aliyuncs\.com/threepeople/deno-sample:).*|${1}$ENV{IMAGE_TAG}|' "${DEPLOYMENT_MANIFEST}"
 
       - name: Commit manifest update
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: |
-          if git diff --quiet fleet-infra/apps/deno-sample/deployment.yaml; then
+          set -euo pipefail
+          if [ ! -f "${DEPLOYMENT_MANIFEST}" ]; then
+            echo "Deployment manifest ${DEPLOYMENT_MANIFEST} not found, skip commit."
+            exit 0
+          fi
+          if git diff --quiet "${DEPLOYMENT_MANIFEST}"; then
             echo "Deployment manifest already references ${IMAGE_TAG}"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add fleet-infra/apps/deno-sample/deployment.yaml
+          git add "${DEPLOYMENT_MANIFEST}"
           git commit -m "chore: update deno-sample image to ${IMAGE_TAG}"
           git push
