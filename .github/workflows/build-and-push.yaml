@@ -14,7 +14,10 @@ jobs:
       contents: write
       packages: write
     env:
-      DEPLOYMENT_MANIFEST: fleet-infra/apps/deno-sample/deployment.yaml
+      FLEET_INFRA_REPO: liuyenhui/fleet-infra
+      FLEET_INFRA_BRANCH: main
+      FLEET_INFRA_PATH: fleet-infra-manifests
+      DEPLOYMENT_MANIFEST: fleet-infra-manifests/apps/deno-sample/deployment.yaml
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,6 +64,15 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Checkout fleet-infra manifests
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FLEET_INFRA_REPO }}
+          ref: ${{ env.FLEET_INFRA_BRANCH }}
+          path: ${{ env.FLEET_INFRA_PATH }}
+          token: ${{ secrets.FLEET_INFRA_GIT_TOKEN }}
+          fetch-depth: 0
+
       - name: Update Deployment image tag
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
@@ -81,12 +93,12 @@ jobs:
             echo "Deployment manifest ${DEPLOYMENT_MANIFEST} not found, skip commit."
             exit 0
           fi
-          if git diff --quiet "${DEPLOYMENT_MANIFEST}"; then
+          if git -C "${FLEET_INFRA_PATH}" diff --quiet -- "apps/deno-sample/deployment.yaml"; then
             echo "Deployment manifest already references ${IMAGE_TAG}"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${DEPLOYMENT_MANIFEST}"
-          git commit -m "chore: update deno-sample image to ${IMAGE_TAG}"
-          git push
+          git -C "${FLEET_INFRA_PATH}" config user.name "github-actions[bot]"
+          git -C "${FLEET_INFRA_PATH}" config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C "${FLEET_INFRA_PATH}" add "apps/deno-sample/deployment.yaml"
+          git -C "${FLEET_INFRA_PATH}" commit -m "chore: update deno-sample image to ${IMAGE_TAG}"
+          git -C "${FLEET_INFRA_PATH}" push origin "${FLEET_INFRA_BRANCH}"

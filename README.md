@@ -59,10 +59,12 @@
    - Checkout 代码（带完整 Git 历史），初始化 Buildx/QEMU。
    - 生成 `IMAGE_TAG=sha-<七位提交>`，同时保留 `main` 标签，并通过 `ALIYUN_REGISTRY_USERNAME/ALIYUN_REGISTRY_PASSWORD` 登录阿里云镜像仓库。
    - 构建并推送 `linux/amd64, linux/arm64` 镜像到 `registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:{main, sha-xxxxxxx}`。
-   - 自动修改 `fleet-infra/apps/deno-sample/deployment.yaml` 中的镜像标签，提交 `chore: update deno-sample image to <tag>` 到 `main`，以便 Flux 捕获清单差异。
+   - 通过 `actions/checkout` 以第二次检出 `liuyenhui/fleet-infra`（或配置在 `FLEET_INFRA_REPO/FLEET_INFRA_BRANCH` 中的仓库和分支），自动修改 `apps/deno-sample/deployment.yaml` 的镜像标签，并以 `github-actions[bot]` 身份推送 `chore: update deno-sample image to <tag>` 提交，供 Flux 捕获。
 3. 工作流生成的提交作者为 `github-actions[bot]`，后续 push 触发的工作流会因 `if: github.actor != 'github-actions[bot]'` 自动跳过，避免循环构建。
-4. 启用前需在仓库 Secrets 中新增 `ALIYUN_REGISTRY_USERNAME` 与 `ALIYUN_REGISTRY_PASSWORD`，对应阿里云镜像仓库的账号。
-5. 若仓库里缺少 `fleet-infra/apps/deno-sample/deployment.yaml`（例如只包含应用源码而不包含集群清单），工作流会跳过 “Update Deployment image tag” 与 “Commit manifest update” 步骤，此时需要使用其他方式让集群获取新的镜像标签。
+4. 启用前需配置以下 Secrets：
+   - `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`：阿里云镜像仓库凭据，用于 `docker/login-action`。
+   - `FLEET_INFRA_GIT_TOKEN`：拥有 `repo` 权限的 GitHub PAT，用于将 `fleet-infra` 仓库检出、提交并推送（可限制为特定仓库）。
+5. 如需更新不同的 Flux 仓库或分支，可在工作流的 `env` 中覆盖 `FLEET_INFRA_REPO`、`FLEET_INFRA_BRANCH`、`FLEET_INFRA_PATH`。
 
 ## 自动镜像发布
 - 每次推送应用代码时，CI 会产出一个新的 `sha-<commit>` 标签，并立即将 Deployment 更新到该标签；无需手动执行 `kubectl rollout restart`。
