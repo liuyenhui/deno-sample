@@ -5,13 +5,9 @@
    ```bash
    deno compile --allow-net main.ts
    ```
-2. **构建容器镜像**
+2. **构建并推送多架构镜像（确保 AMD64/ARM64 节点都可拉取）**
    ```bash
-   docker build -t ghcr.io/liuyenhui/deno-sample:main .
-   ```
-3. **推送镜像**
-   ```bash
-   docker push ghcr.io/liuyenhui/deno-sample:main
+   docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/liuyenhui/deno-sample:main --push .
    ```
 
 ## Kubernetes 清单
