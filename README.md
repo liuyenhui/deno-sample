@@ -45,12 +45,12 @@
    ```bash
    deno compile --allow-net main.ts
    ```
-2. 构建并推送多架构镜像到阿里云，保持 `main` 与 `ts-<UTC时间>-<commit>` 标签（CI 同样采用此格式，便于 ImagePolicy 根据时间戳排序）。
+2. 构建并推送多架构镜像到阿里云，保持 `main` 与 `ts-<上海时间>-<commit>` 标签（CI 同样采用此格式，便于 ImagePolicy 根据时间戳排序）。
    ```bash
    docker buildx build \
      --platform linux/amd64,linux/arm64 \
      -t registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:main \
-     -t registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:ts-$(date -u +'%Y%m%d%H%M%S')-$(git rev-parse --short HEAD) \
+     -t registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:ts-$(TZ='Asia/Shanghai' date +'%Y%m%d%H%M%S')-$(git rev-parse --short HEAD) \
      --push .
    ```
 
@@ -94,7 +94,7 @@
 CI 工作流位于 `.github/workflows/build-and-push.yaml`，只负责构建镜像，不再改写 Git 清单：
 
 1. Push 到 `main`（非 `github-actions[bot]`）或手动 `workflow_dispatch` 时触发。
-2. 生成 `IMAGE_TAG=ts-<UTC时间>-<七位提交>`，并保留 `type=sha` 与 `type=ref` 标签，保持调试友好。
+2. 生成 `IMAGE_TAG=ts-<上海时间>-<七位提交>`，并保留 `type=sha` 与 `type=ref` 标签，保持调试友好。
 3. 登录阿里云，构建 multi-arch 镜像，推送 `main` + `sha-` + `ts-` 多组标签。
 4. 后续由 Flux Image Automation 监听新标签并修改 Git，不需要在 CI 中维护 PAT 或第二次 checkout。
 

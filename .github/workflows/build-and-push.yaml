@@ -21,7 +21,7 @@ jobs:
 
       - name: Prepare image tag
         run: |
-          TS_TAG="ts-$(date -u +'%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
+          TS_TAG="ts-$(TZ='Asia/Shanghai' date +'%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
           echo "IMAGE_TAG=${TS_TAG}" >> $GITHUB_ENV
 
       - name: Set up QEMU
