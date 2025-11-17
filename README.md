@@ -1,11 +1,22 @@
 # Deno Sample 部署指南
 
-## 本地构建
-1. **编译本地可执行文件（可选）**
+面向 Flux GitOps 流水线的 Deno 示例服务：推送代码 → 自动构建多架构镜像 → 更新 `fleet-infra` 清单 → Flux 滚动发布。下文按准备、本地构建、清单管理、CI/CD 与验证顺序说明。
+
+## 1. 准备工作
+- 安装 Deno、Docker（启用 Buildx/QEMU），并可访问 `registry.cn-beijing.aliyuncs.com`。
+- 拥有两个 Git 仓库：
+  - `deno-sample`：应用源码与 GitHub Actions 工作流。
+  - `fleet-infra`：Flux 管理的 Kubernetes 清单，目录结构中包含 `apps/deno-sample/`。
+- 在 `deno-sample` 仓库的 **Settings → Secrets and variables → Actions** 中配置：
+  - `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`：阿里云镜像仓库凭据。
+  - `FLEET_INFRA_GIT_TOKEN`：任选的 PAT（`repo` 权限即可），用于检出并推送 `fleet-infra`。若暂未配置，该工作流仍会构建/推送镜像，但不会自动改写 Flux 清单，需要手动触发发布。
+
+## 2. 本地构建与推送
+1. 可选：在本地验证二进制。
    ```bash
    deno compile --allow-net main.ts
    ```
-2. **构建并推送多架构镜像到阿里云（确保 AMD64/ARM64 节点都可拉取）**
+2. 构建并推送多架构镜像到阿里云，保持 `main` 与 `sha-<commit>` 两个标签（与 CI 保持一致）。
    ```bash
    docker buildx build \
      --platform linux/amd64,linux/arm64 \
@@ -14,21 +25,17 @@
      --push .
    ```
 
-## Kubernetes 清单
-1. 在 `fleet-infra/apps/deno-sample/` 下编写 Deployment、Service、Ingress 等 YAML，并在目录中添加一个 `kustomization.yaml` 聚合这些资源。
-2. Deployment 中 `spec.template.spec.containers[0].image` 指向上文推送的镜像标签（CI 会自动写入 `sha-<commit>` 标签，手动构建时可参考该格式）。
-
-## Flux Source & Kustomization
-1. **GitRepository**
+## 3. Kubernetes/Flux 清单
+1. 在 `fleet-infra/apps/deno-sample/` 中维护 Deployment、Service、Ingress，并用 `kustomization.yaml` 聚合。
+2. Deployment 的 `spec.template.spec.containers[0].image` 应指向当前镜像标签。CI 会自动填入 `sha-<commit>`；如需手动编辑，保持相同格式即可。
+3. 通过 Flux 创建 GitRepository/Kustomization 资源示例：
    ```bash
    flux create source git deno-sample \
      --url=https://github.com/liuyenhui/deno-sample.git \
      --branch=main \
      --interval=1m \
      --export > fleet-infra/clusters/remote-master/flux-system/deno-sample-source.yaml
-   ```
-2. **Kustomization**
-   ```bash
+
    flux create kustomization deno-sample \
      --source=GitRepository/deno-sample \
      --path="./k8s" \
@@ -37,36 +44,31 @@
      --interval=5m \
      --export > fleet-infra/clusters/remote-master/flux-system/deno-sample-kustomization.yaml
    ```
-   - `--path` 指向 `deno-sample` 仓库中存放 Kubernetes 清单的目录（如 `k8s/`）。根据实际目录调整。
-3. 将生成的 YAML 与 `apps/deno-sample/` 清单一起提交并推送到 `fleet-infra` 仓库。
+   - `--path` 指向 `deno-sample` 仓库里存放 Kubernetes 清单的目录（如 `k8s/`），可按实际路径调整。
+4. 将上述 YAML 与 `apps/deno-sample/` 清单一并提交到 `fleet-infra`。
 
-## 验证部署
-1. **确认 Source 和 Kustomization**
+## 4. GitHub Actions 自动化
+工作流位于 `.github/workflows/build-and-push.yaml`，在 `main` 分支有 push（且触发者不是 `github-actions[bot]`）时触发，也支持 `workflow_dispatch` 手动执行。核心步骤：
+
+1. Checkout `deno-sample` 仓库（保留完整历史），设置 `IMAGE_TAG=sha-<七位提交>`。
+2. 初始化 Buildx/QEMU，登录阿里云镜像仓库，构建并推送 `linux/amd64` 与 `linux/arm64` 镜像到 `registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:{main, sha-xxxxxxx}`。
+3. 使用第二次 `actions/checkout` 拉取 `liuyenhui/fleet-infra`（或通过 `FLEET_INFRA_REPO/FLEET_INFRA_BRANCH/FLEET_INFRA_PATH` 覆盖），更新 `apps/deno-sample/deployment.yaml` 的镜像标签，并以 `github-actions[bot]` 身份推送 `chore: update deno-sample image to <tag>` 提交。若未提供 `FLEET_INFRA_GIT_TOKEN`，此步骤会被自动跳过。
+4. 由于工作流会提交回 `deno-sample` 仓库，后续由 `github-actions[bot]` 触发的 push 会被 `if: github.actor != 'github-actions[bot]'` 自动忽略，避免循环构建。
+
+## 5. 自动镜像发布
+- 每次 push 应用代码 → CI 推送新镜像并更新 `fleet-infra` Deployment → Flux 发现清单差异后滚动更新，无需人工执行 `kubectl rollout restart`。
+- 如需回滚或发布特定版本，可直接修改 `fleet-infra/apps/deno-sample/deployment.yaml` 中的镜像标签并提交；Flux 会按 GitOps 机制生效。
+- 如果暂时没有 `FLEET_INFRA_GIT_TOKEN`，可以在镜像推送后手动更新 `fleet-infra` 仓库的 Deployment 标签，或执行 `flux reconcile kustomization deno-sample -n flux-system` 强制拉取最新 Git 状态。
+
+## 6. 验证与故障排查
+1. 检查 Flux Source/Kustomization：
    ```bash
    kubectl --context remote-master get gitrepositories.source.toolkit.fluxcd.io -n flux-system
    kubectl --context remote-master get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system
    ```
-2. **查看资源状态**
+2. 观察应用资源状态：
    ```bash
    kubectl --context remote-master get pods -l app=deno-sample
    kubectl --context remote-master get svc deno-sample
    ```
-3. 如遇失败，使用 `kubectl describe` 检查 `GitRepository` 与 `Kustomization` 的事件日志。
-
-## GitHub Actions 自动构建
-1. 工作流位于 `.github/workflows/build-and-push.yaml`，在 `main` 分支有 push 且触发者不是 `github-actions[bot]` 时自动运行，也可在 GitHub UI 中手动触发（`workflow_dispatch`）。
-2. 工作流流程：
-   - Checkout 代码（带完整 Git 历史），初始化 Buildx/QEMU。
-   - 生成 `IMAGE_TAG=sha-<七位提交>`，同时保留 `main` 标签，并通过 `ALIYUN_REGISTRY_USERNAME/ALIYUN_REGISTRY_PASSWORD` 登录阿里云镜像仓库。
-   - 构建并推送 `linux/amd64, linux/arm64` 镜像到 `registry.cn-beijing.aliyuncs.com/threepeople/deno-sample:{main, sha-xxxxxxx}`。
-   - 通过 `actions/checkout` 以第二次检出 `liuyenhui/fleet-infra`（或配置在 `FLEET_INFRA_REPO/FLEET_INFRA_BRANCH` 中的仓库和分支），自动修改 `apps/deno-sample/deployment.yaml` 的镜像标签，并以 `github-actions[bot]` 身份推送 `chore: update deno-sample image to <tag>` 提交，供 Flux 捕获。
-3. 工作流生成的提交作者为 `github-actions[bot]`，后续 push 触发的工作流会因 `if: github.actor != 'github-actions[bot]'` 自动跳过，避免循环构建。
-4. 启用前需配置以下 Secrets（若缺少 `FLEET_INFRA_GIT_TOKEN`，自动镜像发布仍会推送镜像，但不会改写 Flux 清单）：
-   - `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`：阿里云镜像仓库凭据，用于 `docker/login-action`。
-   - `FLEET_INFRA_GIT_TOKEN`：拥有 `repo` 权限的 GitHub PAT，用于将 `fleet-infra` 仓库检出、提交并推送（可限制为特定仓库）。
-5. 如需更新不同的 Flux 仓库或分支，可在工作流的 `env` 中覆盖 `FLEET_INFRA_REPO`、`FLEET_INFRA_BRANCH`、`FLEET_INFRA_PATH`。
-
-## 自动镜像发布
-- 每次推送应用代码时，CI 会产出一个新的 `sha-<commit>` 标签，并立即将 Deployment 更新到该标签；无需手动执行 `kubectl rollout restart`。
-- Flux 监控 `fleet-infra/apps/deno-sample/` 清单，一旦发现 Deployment 中的镜像标签发生变化便执行滚动更新。
-- 如果需要手动重建历史版本，直接修改 `fleet-infra/apps/deno-sample/deployment.yaml` 的 `image` 字段并提交，或在本地构建时指定任意唯一标签后重复 CI 的更新流程。
+3. 如滚动失败，使用 `kubectl describe` 或 `flux logs --kind Kustomization --name deno-sample -n flux-system` 查看事件；若镜像未更新，确认 CI 是否写入新的 `sha-` 标签以及 `fleet-infra` 是否已合并最新提交。
