@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  deno-service-chart:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-11-26T18:39:36.400489+08:00"
+    description: A Helm chart for Kubernetes
+    digest: 4b2048620430c784110c6b31e00d6b48bb61e5cf367540fef07300b9fc231db4
+    name: deno-service-chart
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/liuyenhui/helm-charts/main/charts/deno-service-chart-0.1.1.tgz
+    version: 0.1.1
+generated: "2025-11-26T18:39:36.398148+08:00"

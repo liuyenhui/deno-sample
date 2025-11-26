@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "deno-service-chart.fullname" . }}
+  labels:
+    app: deno-sample
+spec:
+  selector:
+    matchLabels:
+      app: deno-sample
+  
+  template:
+    metadata:
+      labels:
+        app: deno-sample
+        version: v1
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          
