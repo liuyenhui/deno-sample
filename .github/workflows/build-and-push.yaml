@@ -46,21 +46,15 @@ jobs:
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
-          # github.com 镜像仓库
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-          # 阿里云镜像仓库
-          # registry: registry.cn-beijing.aliyuncs.com
-          # username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
-          # password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/threepeople/deno-sample
+          images: ghcr.io/${{ github.repository }}
           # type=sha 原有镜像tag，type=ref,event=branch 新的镜像tag
           tags: |
             type=ref,event=branch
