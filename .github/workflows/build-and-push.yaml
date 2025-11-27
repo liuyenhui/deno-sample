@@ -21,8 +21,21 @@ jobs:
 
       - name: Prepare image tag
         run: |
-          TS_TAG="ts-$(TZ='Asia/Shanghai' date +'%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
-          echo "IMAGE_TAG=${TS_TAG}" >> $GITHUB_ENV
+          # Calculate version based on run_number
+          # Start from v1.0.0
+          # Every 30 versions, increment minor, reset patch
+          
+          RUN_NUM=${{ github.run_number }}
+          OFFSET=0 # Adjust this if you want to start from a higher number or if run_number is already high
+          COUNTER=$((RUN_NUM - 1 + OFFSET))
+          
+          MAJOR=1
+          MINOR=$((COUNTER / 30))
+          PATCH=$((COUNTER % 30))
+          
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Generated Version: ${NEW_TAG}"
+          echo "IMAGE_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
